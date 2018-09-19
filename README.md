@@ -1,10 +1,10 @@
 tcl-nocgi
 ========
 
-This is a a multi-threaded back-end HTTP server that allows one to embed the Tcl programming language into HTML.
-The "nocgi" comes from eliminating the use of fastcgi/cgi/scgi to communicate with the front-end server.
+This is a a multi-threaded backend HTTP server that allows one to embed the Tcl programming language into HTML.
+The "nocgi" comes from eliminating the use of fastcgi/cgi/scgi to communicate with the frontend server.
 
-Each request is dispatched to be parsed & served by a dedicated thread.
+Each request is dispatched to be parsed and served by a dedicated thread.
 The threading is directly borrowed from [tcl-scgi](https://github.com/gahr/tcl-scgi). 
 Improvements in speed were made by handing off processing to the dedicated thread earlier and using presistent connections throughout the life of the thread.
 
@@ -64,7 +64,9 @@ The following special commands are available:
         Other than being faster than embed, this should give the same output.
         Example:
         echo [insert /public/header.htm]
- 
+        
+These commands can be followed by "body", "cookie", and "query" 
+
      existRequest
         Checks to see if a value exists within the request. Returns true or false
         Example:
