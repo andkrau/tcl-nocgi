@@ -32,6 +32,7 @@ namespace eval ::httpd:: {
         package require ncgi
         package require sha256
         package require aes
+        package require md4
         
         namespace eval ::httpd:: {
             variable startTag [dict get $tuning start_tag]
@@ -183,14 +184,45 @@ namespace eval ::httpd:: {
                 }
                 return $tclStr
             }
-            
+
+            proc random_hex {bytes} {
+                if {[file exists /dev/urandom]} {
+                    set urandom [open /dev/urandom rb]
+                    binary scan [read $urandom [expr {$bytes * 8}] H* data
+                    close $urandom
+                    return $data
+                } else {
+                    set collected {}
+                    set dataNeeded [expr {$bytes * 2}]
+                    while {$dataNeeded > [string length $collected]} {
+                        set list [list [pid] [info cmdcount] [clock microseconds] [clock clicks] [thread::id]]
+                        foreach sock [chan names "sock*"] {
+                            lappend list $sock
+                        }
+                        set len [llength $list]
+                        while {$len} {
+                            set n [expr {int($len*rand())}]
+                            set tmp [lindex $list $n]
+                            lset list $n [lindex $list [incr len -1]]
+                            lset list $len $tmp
+                        }
+                        set list [join $list ""]
+                        #MD4 is used purely for the avalanche effect
+                        append collected [::md4::md4 -hex $list]
+                    }
+                    return [string range $collected 0 [expr {$dataNeeded - 1}]]
+                }
+            }
+
             proc decryptSession {encrypted} {
                 variable hmacKey
                 variable cipherKey
                 set hmac [string range $encrypted 0 63]
-                set crypto [string range $encrypted 64 end]
-                if {$hmac == [::sha2::hmac -hex $hmacKey $crypto]} {
-                    set decrypted [::aes::aes -hex -mode ecb -dir decrypt -key [binary format H* $cipherKey] [binary format H* $crypto]]
+                set time [string range $encrypted 64 71]
+                set iv [string range $encrypted 72 103]
+                set crypto [string range $encrypted 104 end]
+                if {$hmac == [::sha2::hmac -hex $hmacKey $crypto] && [clock seconds] - [expr 0x$time] < 60} {
+                    set decrypted [::aes::aes -hex -mode cbc -dir decrypt -iv [binary format H* $iv] -key [binary format H* $cipherKey] [binary format H* $crypto]]
                     set decrypted [binary decode hex $decrypted]
                     return $decrypted
                 } else {
@@ -201,9 +233,12 @@ namespace eval ::httpd:: {
             proc encryptSession {decrypted} {
                 variable hmacKey
                 variable cipherKey
-                set crypto [::aes::aes -hex -mode ecb -dir encrypt -key [binary format H* $cipherKey] $decrypted]
+                set time [format %x [clock seconds]]
+                set iv [random_hex 16]
+                puts [time { random_hex 1024} 1]
+                set crypto [::aes::aes -hex -mode cbc -dir encrypt -iv [binary format H* $iv] -key [binary format H* $cipherKey] $decrypted]
                 set hmac [::sha2::hmac -hex $hmacKey $crypto]
-                set encrypted "${hmac}${crypto}"
+                set encrypted "${hmac}${time}${iv}${crypto}"
                 return $encrypted
             }
             
@@ -431,8 +466,8 @@ namespace eval ::httpd:: {
         if {$nofThreads < $max_threads} {
             set tid [thread::create]
             thread::preserve $tid
-            puts "There are [tsv::llength tsv freeThreads] free threads"
             incr nofThreads
+            puts "There are [tsv::llength tsv freeThreads] free threads"
             puts "There are [expr {$nofThreads -  [tsv::llength tsv freeThreads]}] active threads"
             puts "There are $nofThreads total threads"
             return $tid
