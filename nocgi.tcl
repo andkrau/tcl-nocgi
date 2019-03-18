@@ -52,14 +52,16 @@ namespace eval ::httpd:: {
                 thread::cond notify [tsv::get tsv cond]
             }
             
-            proc embed {incFile} {
-                set incFile [string trimleft $incFile /]
-                return [parse inline $incFile]
-            }
-            
             proc include {incFile} {
                 set incFile [string trimleft $incFile /]
-                return [parse main $incFile]
+                upvar 1 childList childList
+                set childList [lappend childList $incFile]
+                uplevel 1 {echo [eval [parse [lindex $childList end]]]}
+            }
+
+            proc embed {incFile} {
+                set incFile [string trimleft $incFile /]
+                return [parse $incFile]
             }
 
             proc insert {incFile} {
@@ -122,15 +124,11 @@ namespace eval ::httpd:: {
             }
 
             #The following evaluates the THP script.
-            proc parse {type incFile} {
+            proc parse {incFile} {
                 variable startTag
                 variable endTag
-                set cookie ""
-                set tclStr {}
-                set html ""
                 set stLen [string length $startTag]
                 set etLen [string length $endTag]
-                catch {unset tclStr}
                 # Open and read the include file, this may be the referring script.
                 # !!!  Must add in checks for recursion or a recursion limit!!!
                 if {[catch {set chan [open $incFile r]}]} {
@@ -150,7 +148,7 @@ namespace eval ::httpd:: {
                     set subText [string range $pageText $endPos [expr $startPos-1] ]
                     #puts stderr "subText($incFile), $startPos, $endPos=:$subText:"
                     if {$subText != {}} {
-                        append tclStr "append html [list [ string map {"    " "" "\t" "" "\r" ""} [string trim [string range $pageText $endPos [expr $startPos-1]] \n] ]]\n"
+                        append tclStr "echo [list [ string map {"    " "" "\t" "" "\r" ""} [string trim [string range $pageText $endPos [expr $startPos-1]] \n] ]]\n"
                     }
                     set endPos [string first $endTag $pageText $startPos]
                     set subText [string range $pageText [expr $startPos+$stLen] [expr $endPos-1] ]
@@ -159,13 +157,13 @@ namespace eval ::httpd:: {
                         set subText [string trim $subText]
                         if {[string first "=" $subText] == 0} {
                             set subText [string range $subText 1 [string length $subText]]
-                            append tclStr "append html [expr {$subText}]\n"
+                            append tclStr "echo [expr {$subText}]\n"
                         } elseif {[string first "+" $subText] == 0} {
                             set subText [string range $subText 1 [string length $subText]]
-                            append tclStr "append html [list [parse inline $incFile]]\n"
+                            append tclStr "include $subText\n"
                         } elseif {[string first "!" $subText] == 0} {
                             set subText [string range $subText 1 [string length $subText]]
-                            append tclStr "append html \[$subText\]\n"
+                            append tclStr "echo \[$subText\]\n"
                         } else {
                             append tclStr "$subText\n"
                             #puts "! $subText !"
@@ -174,13 +172,6 @@ namespace eval ::httpd:: {
                     if {$endPos > 0} {
                         incr endPos $etLen
                     }
-                }
-
-                # Do not eval tclStr here if its the main script,
-                # header checking must be done first.
-                if {$type == "inline"} {
-                    eval $tclStr
-                    return $html
                 }
                 return $tclStr
             }
@@ -266,9 +257,10 @@ namespace eval ::httpd:: {
                 }
 
                 # Interpret the THP script and convert to pure tcl.
-                set tclStr [parse main $thpFile]
+                set tclStr [parse $thpFile]
                 #puts $tclStr
                 # Execute the tcl script (with embedded HTML) inside this interp
+                set childList {}
                 if { [catch {eval $tclStr} fid] } {
                     puts stderr "Error evaluating THP:"
                     puts stderr "$::errorInfo"
@@ -467,9 +459,9 @@ namespace eval ::httpd:: {
             set tid [thread::create]
             thread::preserve $tid
             incr nofThreads
-            puts "There are [tsv::llength tsv freeThreads] free threads"
-            puts "There are [expr {$nofThreads -  [tsv::llength tsv freeThreads]}] active threads"
-            puts "There are $nofThreads total threads"
+            #puts "There are [tsv::llength tsv freeThreads] free threads"
+            #puts "There are [expr {$nofThreads -  [tsv::llength tsv freeThreads]}] active threads"
+            #puts "There are $nofThreads total threads"
             return $tid
         }
         puts "There are $nofThreads total threads"
