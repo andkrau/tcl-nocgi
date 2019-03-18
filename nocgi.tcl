@@ -51,17 +51,12 @@ namespace eval ::httpd:: {
                 tsv::lappend tsv freeThreads [thread::id]
                 thread::cond notify [tsv::get tsv cond]
             }
-            
+
             proc include {incFile} {
                 set incFile [string trimleft $incFile /]
-                upvar 1 childList childList
-                set childList [lappend childList $incFile]
-                uplevel 1 {echo [eval [parse [lindex $childList end]]]}
-            }
-
-            proc embed {incFile} {
-                set incFile [string trimleft $incFile /]
-                return [parse $incFile]
+                upvar 1 childFile childFile
+                set childFile $incFile
+                uplevel 1 {eval [parse $childFile]}
             }
 
             proc insert {incFile} {
@@ -129,10 +124,8 @@ namespace eval ::httpd:: {
                 variable endTag
                 set stLen [string length $startTag]
                 set etLen [string length $endTag]
-                # Open and read the include file, this may be the referring script.
-                # !!!  Must add in checks for recursion or a recursion limit!!!
+                # Open and read the include file.
                 if {[catch {set chan [open $incFile r]}]} {
-                    #append tclStr "append html \"<BR><BOLD>File $incFile not found!</BOLD><BR>\"\n"
                     set pageText "<BR><BOLD>File $incFile not found!</BOLD><BR>"
                 } else {
                     set pageText [encoding convertto utf-8 [read $chan]]
@@ -166,7 +159,6 @@ namespace eval ::httpd:: {
                             append tclStr "echo \[$subText\]\n"
                         } else {
                             append tclStr "$subText\n"
-                            #puts "! $subText !"
                         }
                     }
                     if {$endPos > 0} {
@@ -260,7 +252,6 @@ namespace eval ::httpd:: {
                 set tclStr [parse $thpFile]
                 #puts $tclStr
                 # Execute the tcl script (with embedded HTML) inside this interp
-                set childList {}
                 if { [catch {eval $tclStr} fid] } {
                     puts stderr "Error evaluating THP:"
                     puts stderr "$::errorInfo"
