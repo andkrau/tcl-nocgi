@@ -21,9 +21,6 @@ The config file requires the following options:
     header_lines_max
     Maximum number of header lines to accept. This may be removed in favor of the upstream server handling any such limits.
 
-    request_timeout
-    Number of milliseconds to wait for a request to finish. This may be removed in favor of the upstream server handling any such limits.
-    
     listen_port
     Listen on the specified port number.
     
