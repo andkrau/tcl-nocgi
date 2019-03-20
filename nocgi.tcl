@@ -243,6 +243,17 @@ namespace eval ::httpd:: {
                     set thpFile "${root}${url}/index.thp"
                 } elseif {[file exists ${root}${url}/${lastFolder}.thp]} {
                     set thpFile "${root}${url}/${lastFolder}.thp"
+                } elseif {[file exists ${root}public${url}]} {
+                    set fp [open ${root}public${url} r]
+                    fconfigure $fp -translation binary
+                    set inBinData [read $fp]
+                    close $fp
+                    setResponse code 200
+                    setResponse body $inBinData
+                    setResponse type ""
+                    setResponse connection "keep-alive"
+                    setResponse headers {}
+                    return
                 } else {
                     setResponse code 404
                     setResponse body "404 File Not Found"
@@ -398,14 +409,12 @@ namespace eval ::httpd:: {
                         break
                     }
                 }
-            }        trap {HTTPD REQUEST_HEADER TOO_MANY_LINES} {} {
-                    puts stderr "HTTPD REQUEST_HEADER TOO_MANY_LINES $addr"
             }        trap {HTTPD REQUEST_HEADER CONNECTION_CLOSED} {} {
                     puts stderr "HTTPD REQUEST_HEADER CONNECTION_CLOSED $addr"
             }        trap {HTTPD REQUEST_METHOD UNSUPPORTED} {} {
                     puts stderr "HTTPD REQUEST_METHOD UNSUPPORTED $addr"
             } trap {POSIX ECONNABORTED} {} {
-                    puts stderr "SSL ERROR $addr"
+                    puts stderr "CONNECTION ABORTED $addr"
             }        on error {} {
                     puts stderr "$::errorCode $::errorInfo"
             }        finally {
