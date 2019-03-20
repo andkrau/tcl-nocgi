@@ -59,7 +59,7 @@ namespace eval ::httpd:: {
                 uplevel 1 {eval [parse $childFile]}
             }
 
-            proc insert {incFile} {
+            proc readfile {incFile} {
                 set incFile [string trimleft $incFile /]
                 if {[catch {set chan [open $incFile r]}]} {
                     set pageText "<BR><BOLD>File $incFile not found!</BOLD><BR>"
@@ -67,7 +67,9 @@ namespace eval ::httpd:: {
                     set pageText [encoding convertto utf-8 [read $chan]]
                     close $chan
                 }
-                return $pageText
+                upvar 1 fileread fileread
+                set fileread $pageText
+                uplevel 1 {echo $fileread}
             }
 
             proc setResponse {parent data args} {
@@ -131,7 +133,8 @@ namespace eval ::httpd:: {
                     set pageText [encoding convertto utf-8 [read $chan]]
                     close $chan
                 }
-                regexp {(^|\n)\s*(<.*$)} $pageText {} {} pageText
+                #Can this be removed?
+                #regexp {(^|\n)\s*(<.*$)} $pageText {} {} pageText
                 set pageTextLen [string length $pageText]
 
                 set endPos 0
@@ -141,7 +144,9 @@ namespace eval ::httpd:: {
                     set subText [string range $pageText $endPos [expr $startPos-1] ]
                     #puts stderr "subText($incFile), $startPos, $endPos=:$subText:"
                     if {$subText != {}} {
-                        append tclStr "echo [list [ string map {"    " " " "  " " " "\t" "" "\r" "" "\n" ""} [string trim [string range $pageText $endPos [expr $startPos-1]] \n] ]]\n"
+                        #This next line appears to be unnecessary
+                        #append tclStr "echo [list [ string map {"    " " " "  " " " "\t" "" "\r" "" "\n" ""} [string trim [string range $pageText $endPos [expr $startPos-1]] \n] ]]\n"
+                        append tclStr "echo [list [string range $pageText $endPos [expr $startPos-1] ]]\n"
                     }
                     set endPos [string first $endTag $pageText $startPos]
                     set subText [string range $pageText [expr $startPos+$stLen] [expr $endPos-1] ]
@@ -218,7 +223,6 @@ namespace eval ::httpd:: {
                 variable cipherKey
                 set time [format %x [clock seconds]]
                 set iv [random_hex 16]
-                puts [time { random_hex 1024} 1]
                 set crypto [::aes::aes -hex -mode cbc -dir encrypt -iv [binary format H* $iv] -key [binary format H* $cipherKey] $decrypted]
                 set hmac [::sha2::hmac -hex $hmacKey $crypto]
                 set encrypted "${hmac}${time}${iv}${crypto}"

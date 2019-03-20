@@ -18,9 +18,6 @@ tclsh86.exe C:\somePath\tcl-nocgi.tcl -config C:\somePath\config.ini
 
 The config file requires the following options:
 
-    header_lines_max
-    Maximum number of header lines to accept. This may be removed in favor of the upstream server handling any such limits.
-
     listen_port
     Listen on the specified port number.
     
@@ -42,7 +39,7 @@ The config file requires the following options:
     hmac_key
     64 character hex string. Used in cookie encryption/decryption.
     
-The tcl-nocgi.tcl software requires Tcl 8.6 as well as the Thread, ncgi, aes, and sha256 extensions. These extensions are all included with Tcllib.
+The tcl-nocgi.tcl software requires Tcl 8.6 as well as the Thread, ncgi, aes, md4 and sha256 extensions. These extensions are all included with Tcllib.
 
 The following special commands are available:
 
@@ -51,16 +48,17 @@ The following special commands are available:
         Example:
         echo "cheese and rice"
    
-    embed
-        Inline execution of another THP script
+    include
+        Includes and evaluates another THP script
+        The script inherits the variable scope of the line on which the include occurs. 
         Example:
-        echo [embed /menu/menu.thp]
+        include /menu/menu.thp
 
-    insert
-        Appends plain HTML to the document
-        Other than being faster than embed, this should give the same output.
+    readfile
+        Inserts plain HTML into the document
+        Other than being faster than include, this should give the same output.
         Example:
-        echo [insert /public/header.htm]
+        readfile /public/header.htm
         
 These commands can be followed by "body", "cookie", and "query" 
 
