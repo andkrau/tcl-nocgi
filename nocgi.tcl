@@ -137,11 +137,11 @@ namespace eval ::httpd:: {
                 set endPos 0
                 #puts stderr "pageTextLen=$pageTextLen"
                 while { $endPos != -1 && ($endPos < [expr $pageTextLen - 1]) && ( [set startPos [string first $startTag $pageText $endPos]] != -1 || [set startPos $pageTextLen] > 0)} {
-                    
+
                     set subText [string range $pageText $endPos [expr $startPos-1] ]
                     #puts stderr "subText($incFile), $startPos, $endPos=:$subText:"
                     if {$subText != {}} {
-                        append tclStr "echo [list [ string map {"    " "" "\t" "" "\r" ""} [string trim [string range $pageText $endPos [expr $startPos-1]] \n] ]]\n"
+                        append tclStr "echo [list [ string map {"    " " " "  " " " "\t" "" "\r" "" "\n" ""} [string trim [string range $pageText $endPos [expr $startPos-1]] \n] ]]\n"
                     }
                     set endPos [string first $endTag $pageText $startPos]
                     set subText [string range $pageText [expr $startPos+$stLen] [expr $endPos-1] ]
@@ -224,7 +224,7 @@ namespace eval ::httpd:: {
                 set encrypted "${hmac}${time}${iv}${crypto}"
                 return $encrypted
             }
-            
+
             ## Process a single HTTP request.
             proc process {url} {
                 variable request
@@ -233,7 +233,7 @@ namespace eval ::httpd:: {
                 set html {}
                 set url [string trimright $url /]
                 set lastFolder [lindex [split $url /] end]
-                
+
                 # If it exists, set the index file. Otherwise, throw an error.
                 if {[file exists ${root}${url}/index.thp]} {
                     set thpFile "${root}${url}/index.thp"
@@ -279,6 +279,12 @@ namespace eval ::httpd:: {
                 chan configure $sock -blocking 1
                 set served 0
                 while {1} {
+                    if {[string length $request] > 0} {
+                        puts $request
+                    }
+                    if {[string length $response] > 0} {
+                        puts $response
+                    }
                     ## HTTP headers are ascii encoded with CRLF line ends, line buffering is fine.
                     chan configure $sock -encoding ascii -translation crlf -buffering line
                     ## Read the request line.
@@ -302,7 +308,7 @@ namespace eval ::httpd:: {
                     dict set headers Accept-Encoding "identity;q=0.001"
                     
                     ## Read additional header lines.
-                    for {set i 0} {$i < [dict get $::tuning header_lines_max]} {incr i} {
+                    while {1} {
                         ## Read header line.
                         chan gets $sock headerline
                         ## It's an error to have an eof before header end (empty line). 
@@ -487,4 +493,6 @@ namespace eval ::httpd:: {
     }
 }
     set sk [socket -server ::httpd::handle_connect [dict get $tuning listen_port]]
+    set time [clock format [clock seconds] -format "%Y-%m-%d %H:%M:%S"]
+    puts "$time nocgi server started!"
     vwait forever
