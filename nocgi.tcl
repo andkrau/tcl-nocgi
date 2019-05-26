@@ -133,11 +133,10 @@ namespace eval ::httpd:: {
                     set pageText [encoding convertto utf-8 [read $chan]]
                     close $chan
                 }
-                #Can this be removed?
-                #regexp {(^|\n)\s*(<.*$)} $pageText {} {} pageText
-                set pageTextLen [string length $pageText]
 
+                set pageTextLen [string length $pageText]
                 set endPos 0
+
                 while { $endPos != -1 && ($endPos < [expr $pageTextLen - 1]) && ( [set startPos [string first $startTag $pageText $endPos]] != -1 || [set startPos $pageTextLen] > 0)} {
 
                     set subText [string range $pageText $endPos [expr $startPos-1]]
