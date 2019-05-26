@@ -38,8 +38,7 @@ namespace eval ::httpd:: {
             variable startTag [dict get $tuning start_tag]
             variable endTag [dict get $tuning end_tag]
             variable root [dict get $tuning site_root]            
-            variable cipherKey [dict get $tuning cipher_key]
-            variable hmacKey [dict get $tuning hmac_key]
+            variable cryptoKey [dict get $tuning crypto_key]
             variable request [dict create]
             variable response [dict create]
             interp alias {} echo {} append html
@@ -200,14 +199,13 @@ namespace eval ::httpd:: {
             }
 
             proc decryptSession {encrypted} {
-                variable hmacKey
-                variable cipherKey
+                variable cryptoKey
                 set hmac [string range $encrypted 0 63]
                 set time [string range $encrypted 64 71]
                 set iv [string range $encrypted 72 103]
                 set crypto [string range $encrypted 104 end]
-                if {$hmac == [::sha2::hmac -hex $hmacKey $crypto] && [clock seconds] - [expr 0x$time] < 60} {
-                    set decrypted [::aes::aes -hex -mode cbc -dir decrypt -iv [binary format H* $iv] -key [binary format H* $cipherKey] [binary format H* $crypto]]
+                if {$hmac == [::sha2::hmac -hex $cryptoKey $crypto] && [clock seconds] - [expr 0x$time] < 60} {
+                    set decrypted [::aes::aes -hex -mode cbc -dir decrypt -iv [binary format H* $iv] -key [binary format H* $cryptoKey] [binary format H* $crypto]]
                     set decrypted [binary decode hex $decrypted]
                     return $decrypted
                 } else {
@@ -216,12 +214,11 @@ namespace eval ::httpd:: {
             }
 
             proc encryptSession {decrypted} {
-                variable hmacKey
-                variable cipherKey
+                variable cryptoKey
                 set time [format %x [clock seconds]]
                 set iv [random_bytes 16]
-                set crypto [::aes::aes -hex -mode cbc -dir encrypt -iv [binary format H* $iv] -key [binary format H* $cipherKey] $decrypted]
-                set hmac [::sha2::hmac -hex $hmacKey $crypto]
+                set crypto [::aes::aes -hex -mode cbc -dir encrypt -iv [binary format H* $iv] -key [binary format H* $cryptoKey] $decrypted]
+                set hmac [::sha2::hmac -hex $cryptoKey $crypto]
                 set encrypted "${hmac}${time}${iv}${crypto}"
                 return $encrypted
             }
