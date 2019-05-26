@@ -138,19 +138,14 @@ namespace eval ::httpd:: {
                 set pageTextLen [string length $pageText]
 
                 set endPos 0
-                #puts stderr "pageTextLen=$pageTextLen"
                 while { $endPos != -1 && ($endPos < [expr $pageTextLen - 1]) && ( [set startPos [string first $startTag $pageText $endPos]] != -1 || [set startPos $pageTextLen] > 0)} {
 
-                    set subText [string range $pageText $endPos [expr $startPos-1] ]
-                    #puts stderr "subText($incFile), $startPos, $endPos=:$subText:"
+                    set subText [string range $pageText $endPos [expr $startPos-1]]
                     if {$subText != {}} {
-                        #This next line appears to be unnecessary
-                        #append tclStr "echo [list [ string map {"    " " " "  " " " "\t" "" "\r" "" "\n" ""} [string trim [string range $pageText $endPos [expr $startPos-1]] \n] ]]\n"
                         append tclStr "echo [list [string range $pageText $endPos [expr $startPos-1] ]]\n"
                     }
                     set endPos [string first $endTag $pageText $startPos]
-                    set subText [string range $pageText [expr $startPos+$stLen] [expr $endPos-1] ]
-                    #puts stderr "subText2($incFile), $startPos, $endPos=:$subText:"
+                    set subText [string range $pageText [expr $startPos+$stLen] [expr $endPos-1]]
                     if {$endPos != -1 && $subText != {}} {
                         set subText [string trim $subText]
                         if {[string first "=" $subText] == 0} {
@@ -173,7 +168,7 @@ namespace eval ::httpd:: {
                 return $tclStr
             }
 
-            proc random_hex {bytes} {
+            proc random_bytes {bytes} {
                 if {[file exists /dev/urandom]} {
                     set urandom [open /dev/urandom rb]
                     binary scan [read $urandom [expr {$bytes * 8}] H* data
@@ -183,9 +178,12 @@ namespace eval ::httpd:: {
                     set collected {}
                     set dataNeeded [expr {$bytes * 2}]
                     while {$dataNeeded > [string length $collected]} {
-                        set list [list [pid] [info cmdcount] [clock microseconds] [clock clicks] [thread::id]]
+                        set list [list [pid] [info cmdcount] [clock microseconds] [clock clicks] [thread::id] [info hostname]]
                         foreach sock [chan names "sock*"] {
                             lappend list $sock
+                        }
+                        foreach {key value} [array get ::tcl_platform] {
+                            lappend list $value
                         }
                         set len [llength $list]
                         while {$len} {
@@ -222,7 +220,7 @@ namespace eval ::httpd:: {
                 variable hmacKey
                 variable cipherKey
                 set time [format %x [clock seconds]]
-                set iv [random_hex 16]
+                set iv [random_bytes 16]
                 set crypto [::aes::aes -hex -mode cbc -dir encrypt -iv [binary format H* $iv] -key [binary format H* $cipherKey] $decrypted]
                 set hmac [::sha2::hmac -hex $hmacKey $crypto]
                 set encrypted "${hmac}${time}${iv}${crypto}"

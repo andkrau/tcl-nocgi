@@ -22,7 +22,8 @@ The config file requires the following options:
     Listen on the specified port number.
     
     max_threads
-    Maximum number of threads. If the number of requests exceeds this number, they will wait until a thread is freed.
+    Maximum number of threads. 
+    If the number of requests exceeds this number, they will wait until a thread is freed.
     
     site_root
     Use this path as a search base for scripts.
@@ -62,7 +63,7 @@ The following special commands are available:
         
 These commands can be followed by "body", "cookie", and "query" 
 
-     existRequest
+    existRequest
         Checks to see if a value exists within the request. Returns true or false
         Example:
         existRequest query lookfor
