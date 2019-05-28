@@ -13,7 +13,7 @@ User scripts consist of pure HTML code with interleaved Tcl scripts enclosed in 
 ## Usage
 
 ```html
-tclsh86.exe C:\somePath\tcl-nocgi.tcl -config C:\somePath\config.ini
+tclsh86.exe C:\somePath\tcl-nocgi.tcl -config C:\somePath\example.ini
 ```
 
 The config file requires the following options:
@@ -37,7 +37,7 @@ The config file requires the following options:
     crypto_key
     64 character hex string. Used in cookie encryption/decryption.
     
-The tcl-nocgi.tcl software requires Tcl 8.6 as well as the Thread, ncgi, aes, md4 and sha256 extensions. These extensions are all included with Tcllib.
+The tcl-nocgi.tcl software requires Tcl 8.6 as well as the Thread, ncgi, inifile, aes, md4 and sha256 extensions. These extensions are all included with Tcllib.
 
 The following special commands are available:
 

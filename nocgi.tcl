@@ -1,4 +1,5 @@
 package require Thread
+package require inifile
 encoding system utf-8
 
 if { $argc > 0 } {
@@ -17,11 +18,11 @@ if { ![info exists config]} {
     exit
 }
 
-set config [open $config r]
-set config [read -nonewline $config]
+set config [::ini::open $config]
+set options [::ini::get $config config]
 
 ## Tuning parameters.
-variable tuning $config
+variable tuning $options
 cd [dict get $tuning site_root]
 rename cd ""
 
