@@ -34,10 +34,7 @@ The config file requires the following options:
     end_tag
     Ending tag for enclosing embedded Tcl code
     
-    cipher_key
-    64 character hex string. Used in cookie encryption/decryption.
-    
-    hmac_key
+    crypto_key
     64 character hex string. Used in cookie encryption/decryption.
     
 The tcl-nocgi.tcl software requires Tcl 8.6 as well as the Thread, ncgi, aes, md4 and sha256 extensions. These extensions are all included with Tcllib.
