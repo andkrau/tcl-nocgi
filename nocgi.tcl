@@ -26,9 +26,12 @@ variable tuning $options
 cd [dict get $tuning site_root]
 rename cd ""
 
-## Put anything httpd into an own namespace.
 namespace eval ::httpd:: {
 
+    ##
+    # The following script is used by worker threads to handle client
+    # connections. The worker thread is responsible for communicating with the
+    # client over the client socket and for closing the connection once done.
     set worker_script {
         package require ncgi
         package require sha256
@@ -295,7 +298,7 @@ namespace eval ::httpd:: {
                     if {[string length $response] > 0} {
                         puts $response
                     }
-                    ## HTTP headers are ascii encoded with CRLF line ends, line buffering is fine.
+                    ## HTTP headers are ascii encoded with CRLF line endings, line buffering is fine.
                     chan configure $sock -encoding ascii -translation crlf -buffering line
                     ## Read the request line.
                     set requestline {}
@@ -385,7 +388,7 @@ namespace eval ::httpd:: {
                     ## Send result header.
                     chan configure $sock -encoding ascii -translation crlf -buffering full
                     #puts $sock [::ncgi::header [getResponse type] Content-Length [string length [getResponse body]] Connection [getResponse connection]]
-                    puts $sock "$version [getResponse code]"
+                    puts $sock "HTTP/1.0 [getResponse code]"
                     puts $sock "Content-Type: [getResponse type]"
                     puts $sock "Content-Length: [string length [getResponse body]]"
                     puts $sock "Connection: [getResponse connection]"
@@ -464,9 +467,6 @@ namespace eval ::httpd:: {
             set tid [thread::create]
             thread::preserve $tid
             incr nofThreads
-            #puts "There are [tsv::llength tsv freeThreads] free threads"
-            #puts "There are [expr {$nofThreads -  [tsv::llength tsv freeThreads]}] active threads"
-            #puts "There are $nofThreads total threads"
             return $tid
         }
         puts "There are $nofThreads total threads"
