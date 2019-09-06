@@ -16,6 +16,7 @@ if {![file isfile $configFile]} {
 
 set config [::ini::open $configFile]
 variable nocgi_config [::ini::get $config nocgi]
+variable site_config [::ini::get $config site]
 
 ## Tuning parameters.
 set root [string trimright [dict get $nocgi_config site_root] /]
@@ -36,6 +37,7 @@ namespace eval ::httpd:: {
     # connections. The worker thread is responsible for communicating with the
     # client over the client socket and for closing the connection once done.
     set worker_script {
+        lappend auto_path [dict get $nocgi_config lib_path]
         package require ncgi
         package require chacha20poly1305
         
@@ -212,12 +214,12 @@ namespace eval ::httpd:: {
                 set lastFolder [lindex [split $url /] end]
 
                 # If it exists, set the index file. Otherwise, throw an error.
-                if {[file exists ${root}${url}/index.thp]} {
-                    set thpFile "${root}${url}/index.thp"
-                } elseif {[file exists ${root}${url}/${lastFolder}.thp]} {
-                    set thpFile "${root}${url}/${lastFolder}.thp"
-                } elseif {[file exists ${root}public${url}]} {
-                    set fp [open ${root}public${url} r]
+                if {[file exists ${root}/${url}/index.thp]} {
+                    set thpFile "${root}/${url}/index.thp"
+                } elseif {[file exists ${root}/${url}/${lastFolder}.thp]} {
+                    set thpFile "${root}/${url}/${lastFolder}.thp"
+                } elseif {[file exists ${root}/public${url}]} {
+                    set fp [open ${root}/public${url} r]
                     fconfigure $fp -translation binary
                     set inBinData [read $fp]
                     close $fp
@@ -382,17 +384,17 @@ namespace eval ::httpd:: {
                         break
                     }
                 }
-            }        trap {HTTPD REQUEST_HEADER CONNECTION_CLOSED} {} {
-                    puts stderr "HTTPD REQUEST_HEADER CONNECTION_CLOSED $addr"
-            }        trap {HTTPD REQUEST_METHOD UNSUPPORTED} {} {
-                    puts stderr "HTTPD REQUEST_METHOD UNSUPPORTED $addr"
+            } trap {HTTPD REQUEST_HEADER CONNECTION_CLOSED} {} {
+                puts stderr "HTTPD REQUEST_HEADER CONNECTION_CLOSED $addr"
+            } trap {HTTPD REQUEST_METHOD UNSUPPORTED} {} {
+                puts stderr "HTTPD REQUEST_METHOD UNSUPPORTED $addr"
             } trap {POSIX ECONNABORTED} {} {
-                    puts stderr "CONNECTION ABORTED $addr"
-            }        on error {} {
-                    puts stderr "$::errorCode $::errorInfo"
-            }        finally {
-                    ::httpd::timeout $sock
-            }            
+                puts stderr "CONNECTION ABORTED $addr"
+            } on error {} {
+                puts stderr "$::errorCode $::errorInfo"
+            } finally {
+                ::httpd::timeout $sock
+            }
         }
     }
 
@@ -408,6 +410,7 @@ namespace eval ::httpd:: {
     proc handle_request {sock addr port} {
         variable worker_script
         variable nocgi_config
+        variable site_config
         
         # We can't read from the socket once we begin serving the request, and
         # we don't need a timeout anymore.
@@ -423,6 +426,7 @@ namespace eval ::httpd:: {
         thread::send $tid [list set addr  $addr]
         thread::send $tid [list set port  $port]
         thread::send $tid [list set nocgi_config  $::nocgi_config]
+        thread::send $tid [list set site_config  $::site_config]
         thread::send -async $tid $worker_script
 
         # Cleanup this connection's state in the master thread. The worker
