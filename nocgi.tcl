@@ -2,23 +2,19 @@ package require Thread
 package require inifile
 encoding system utf-8
 
-if { $argc > 0 } {
-    set i 0
-    foreach arg $argv {
-        set arg [string trimleft $arg -]
-        incr i
-        set $arg [lindex $argv $i]
-    }
+if {$argc > 0} {
+    set configFile [lindex $argv 0]
 } else {
-    puts "no command line arguments passed!"
-    exit
-}
-if { ![info exists config]} {
-    puts "Missing arguments!"
+    puts "No configuration file specified!"
     exit
 }
 
-set config [::ini::open $config]
+if {![file isfile $configFile]} {
+    puts "Configuration file does not exist!"
+    exit
+}
+
+set config [::ini::open $configFile]
 set options [::ini::get $config config]
 
 ## Tuning parameters.

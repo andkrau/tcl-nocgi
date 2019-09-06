@@ -13,7 +13,7 @@ User scripts consist of pure HTML code with interleaved Tcl scripts enclosed in 
 ## Usage
 
 ```html
-tclsh86.exe C:\somePath\tcl-nocgi.tcl -config C:\somePath\example.ini
+tclsh86.exe C:\somePath\tcl-nocgi.tcl C:\somePath\example.ini
 ```
 
 The config file requires the following options:
@@ -70,11 +70,28 @@ These commands can be followed by "body", "cookie", and "query":
         Example:
         getRequest query lookfor
 
+    setRequest
+        Overrides a value for the request.
+        Example:
+        setRequest cookie token $token
+
+These commands can be followed by "cookie", and "type":
+
+    existResponse
+        Checks to see if a value exists within the response. Returns true or false.
+        Example:
+        existResponse type
+
+    getResponse
+        Retrieves a value from within the response.
+        Example:
+        getResponse cookie token
+
     setResponse
         Sets a value for the response.
         Example:
-        setResponse cookie username $username
-        
+        setResponse type "image/jpeg"
+
 Additionally, the following variables are available to client scripts:
 
     httpd::request
