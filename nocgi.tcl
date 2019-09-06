@@ -37,9 +37,7 @@ namespace eval ::httpd:: {
     # client over the client socket and for closing the connection once done.
     set worker_script {
         package require ncgi
-        package require sha256
-        package require aes
-        package require md4
+        package require chacha20poly1305
         
         namespace eval ::httpd:: {
             variable startTag [dict get $nocgi_config start_tag]
@@ -173,61 +171,35 @@ namespace eval ::httpd:: {
                 return $tclStr
             }
 
-            proc random_bytes {bytes} {
-                if {[file exists /dev/urandom]} {
-                    set urandom [open /dev/urandom rb]
-                    binary scan [read $urandom [expr {$bytes * 8}] H* data
-                    close $urandom
-                    return $data
-                } else {
-                    set collected {}
-                    set dataNeeded [expr {$bytes * 2}]
-                    while {$dataNeeded > [string length $collected]} {
-                        set list [list [pid] [info cmdcount] [clock microseconds] [clock clicks] [thread::id] [info hostname]]
-                        foreach sock [chan names "sock*"] {
-                            lappend list $sock
-                        }
-                        foreach {key value} [array get ::tcl_platform] {
-                            lappend list $value
-                        }
-                        set len [llength $list]
-                        while {$len} {
-                            set n [expr {int($len*rand())}]
-                            set tmp [lindex $list $n]
-                            lset list $n [lindex $list [incr len -1]]
-                            lset list $len $tmp
-                        }
-                        set list [join $list ""]
-                        #MD4 is used purely for the avalanche effect
-                        append collected [::md4::md4 -hex $list]
-                    }
-                    return [string range $collected 0 [expr {$dataNeeded - 1}]]
-                }
-            }
-
             proc decryptSession {encrypted} {
                 variable cryptoKey
-                set hmac [string range $encrypted 0 63]
-                set time [string range $encrypted 64 71]
-                set iv [string range $encrypted 72 103]
-                set crypto [string range $encrypted 104 end]
-                if {$hmac == [::sha2::hmac -hex $cryptoKey $crypto] && [clock seconds] - [expr 0x$time] < 60} {
-                    set decrypted [::aes::aes -hex -mode cbc -dir decrypt -iv [binary format H* $iv] -key [binary format H* $cryptoKey] [binary format H* $crypto]]
-                    set decrypted [binary decode hex $decrypted]
-                    return $decrypted
+                set time [string range $encrypted 0 7]
+                set nonce [string range $encrypted 8 31]
+                set crypto [string range $encrypted 32 end]
+                scan $time %x stamp
+                set now [clock seconds]
+                if {$now - $stamp < 3600} {
+                    puts [expr $now - $stamp]
+                    try {
+                        set decrypted [::chacha20poly1305::decrypt [binary format H* $cryptoKey] [binary format H* $crypto] -assocdata [binary format H* $time] -nonce [binary format H* $nonce]]
+                        return $decrypted
+                    } on error {} {
+                        return "error:DecryptionFailed"
+                    }
                 } else {
-                    return "error:DecryptionFailed"
+                    return "error:CookieTimeout"
                 }
             }
 
             proc encryptSession {decrypted} {
                 variable cryptoKey
-                set time [format %x [clock seconds]]
-                set iv [random_bytes 16]
-                set crypto [::aes::aes -hex -mode cbc -dir encrypt -iv [binary format H* $iv] -key [binary format H* $cryptoKey] $decrypted]
-                set hmac [::sha2::hmac -hex $cryptoKey $crypto]
-                set encrypted "${hmac}${time}${iv}${crypto}"
-                return $encrypted
+                set id [string range [thread::id] end-3 end]
+                set count [string range [format %06llx [info cmdcount]] end-5 end]
+                set ms [string range [format %014llx [clock microseconds]] end-13 end]
+                set time [string range [format %08llx [clock seconds]] end-7 end]
+                set nonce "${id}${count}${ms}"
+                binary scan [::chacha20poly1305::encrypt [binary format H* $cryptoKey] $decrypted -assocdata [binary format H* $time] -nonce [binary format H* $nonce]] H* encrypted
+                return ${time}${nonce}${encrypted}
             }
 
             ## Process a single HTTP request.
