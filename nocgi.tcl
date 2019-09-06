@@ -15,11 +15,18 @@ if {![file isfile $configFile]} {
 }
 
 set config [::ini::open $configFile]
-set options [::ini::get $config config]
+variable nocgi_config [::ini::get $config nocgi]
 
 ## Tuning parameters.
-variable tuning $options
-cd [dict get $tuning site_root]
+set root [string trimright [dict get $nocgi_config site_root] /]
+dict set nocgi_config site_root $root
+dict append nocgi_config "lib_path" "[pwd]/lib"
+pkg_mkIndex "[pwd]/lib"
+if {[file isdirectory ${root}/lib]} {
+    dict append nocgi_config "lib_path" "${root}/lib"
+    pkg_mkIndex "${root}/lib"
+}
+cd [dict get $nocgi_config site_root]
 rename cd ""
 
 namespace eval ::httpd:: {
@@ -35,10 +42,10 @@ namespace eval ::httpd:: {
         package require md4
         
         namespace eval ::httpd:: {
-            variable startTag [dict get $tuning start_tag]
-            variable endTag [dict get $tuning end_tag]
-            variable root [dict get $tuning site_root]            
-            variable cryptoKey [dict get $tuning crypto_key]
+            variable startTag [dict get $nocgi_config start_tag]
+            variable endTag [dict get $nocgi_config end_tag]
+            variable root [dict get $nocgi_config site_root]
+            variable cryptoKey [dict get $nocgi_config crypto_key]
             variable request [dict create]
             variable response [dict create]
             interp alias {} echo {} append html
@@ -283,7 +290,7 @@ namespace eval ::httpd:: {
             }
             
             ## Accept incoming connection
-            try {      
+            try {
                 ## Do blocking I/O on client socket. This actually improves CPU usage while not impacting performance at all.
                 chan configure $sock -blocking 1
                 set served 0
@@ -428,7 +435,7 @@ namespace eval ::httpd:: {
     # Handle a request on a different thread.
     proc handle_request {sock addr port} {
         variable worker_script
-        variable tuning
+        variable nocgi_config
         
         # We can't read from the socket once we begin serving the request, and
         # we don't need a timeout anymore.
@@ -443,7 +450,7 @@ namespace eval ::httpd:: {
         thread::send $tid [list set sock  $sock]
         thread::send $tid [list set addr  $addr]
         thread::send $tid [list set port  $port]
-        thread::send $tid [list set tuning  $::tuning]
+        thread::send $tid [list set nocgi_config  $::nocgi_config]
         thread::send -async $tid $worker_script
 
         # Cleanup this connection's state in the master thread. The worker
@@ -481,7 +488,7 @@ namespace eval ::httpd:: {
         return $tid
     }
     
-    variable max_threads [dict get $tuning max_threads]
+    variable max_threads [dict get $nocgi_config max_threads]
     ##
     # Thread pool -related variables. We don't use tpool because we don't have
     # a way to pass channels when posting a job into a tpool instance.
@@ -496,7 +503,7 @@ namespace eval ::httpd:: {
         catch {chan close $sock}
     }
 }
-    set sk [socket -server ::httpd::handle_connect [dict get $tuning listen_port]]
+    set sk [socket -server ::httpd::handle_connect [dict get $nocgi_config listen_port]]
     set time [clock format [clock seconds] -format "%Y-%m-%d %H:%M:%S"]
     puts "$time nocgi server started!"
     vwait forever
