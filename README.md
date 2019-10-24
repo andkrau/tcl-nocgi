@@ -37,7 +37,7 @@ The config file requires the following options:
     crypto_key
     64 character hex string used in cookie encryption/decryption.
     
-The tcl-nocgi.tcl software requires Tcl 8.6 as well as the Thread, ncgi, inifile, aes, md4 and sha256 extensions. These extensions are all included with Tcllib.
+The tcl-nocgi.tcl software requires Tcl 8.6 as well as the Thread, ncgi, and inifile extensions. These extensions are all included with Tcllib.
 
 The following special commands are available:
 
@@ -75,7 +75,7 @@ These commands can be followed by "body", "cookie", and "query":
         Example:
         setRequest cookie token $token
 
-These commands can be followed by "cookie", and "type":
+These commands can be followed by "cookie" and "type":
 
     existResponse
         Checks to see if a value exists within the response. Returns true or false.
