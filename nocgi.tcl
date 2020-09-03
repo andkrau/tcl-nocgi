@@ -175,6 +175,7 @@ namespace eval ::httpd:: {
 
             proc decryptSession {encrypted} {
                 variable cryptoKey
+                binary scan [binary decode base64 [string map {- + _ /} $encrypted]] H* encrypted
                 set time [string range $encrypted 0 7]
                 set nonce [string range $encrypted 8 31]
                 set crypto [string range $encrypted 32 end]
@@ -201,7 +202,7 @@ namespace eval ::httpd:: {
                 set time [string range [format %08llx [clock seconds]] end-7 end]
                 set nonce "${id}${count}${ms}"
                 binary scan [::chacha20poly1305::encrypt [binary format H* $cryptoKey] $decrypted -assocdata [binary format H* $time] -nonce [binary format H* $nonce]] H* encrypted
-                return ${time}${nonce}${encrypted}
+                return [string map {+ - / _ = {}} [binary encode base64 [binary format H* ${time}${nonce}${encrypted}]]
             }
 
             ## Process a single HTTP request.
