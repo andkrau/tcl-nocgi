@@ -112,17 +112,17 @@ namespace eval ::httpd:: {
 
             proc existResponse {parent args} {
                 if {$args eq ""} {
-                    return [dict exist $httpd::response $parent]
+                    return [dict exists $httpd::response $parent]
                 } else {
-                    return [dict exist $httpd::response $parent $args]
+                    return [dict exists $httpd::response $parent $args]
                 }
             }
 
             proc existRequest {parent args} {
                 if {$args eq ""} {
-                    return [dict exist $httpd::request $parent]
+                    return [dict exists $httpd::request $parent]
                 } else {
-                    return [dict exist $httpd::request $parent $args]
+                    return [dict exists $httpd::request $parent $args]
                 }
             }
 
@@ -206,10 +206,7 @@ namespace eval ::httpd:: {
             }
 
             ## Process a single HTTP request.
-            proc process {url} {
-                variable request
-                variable response
-                variable root
+            proc process {url root} {
                 set html {}
                 set url [string trimright $url /]
                 set lastFolder [lindex [split $url /] end]
@@ -242,12 +239,20 @@ namespace eval ::httpd:: {
                 # Interpret the THP script and convert to pure tcl.
                 set tclStr [parse $thpFile]
                 #puts $tclStr
+
+                # Unset all variables other than tclStr & html
+                unset url
+                unset lastFolder
+                unset thpFile
+                unset root
+
                 # Execute the tcl script (with embedded HTML) inside this interp
-                if { [catch {eval $tclStr} fid] } {
-                    puts stderr "Error evaluating THP:"
+                if { [catch $tclStr] } {
+                    set time [clock format [clock seconds] -format "%Y-%m-%d %H:%M:%S"]
+                    puts stderr "\n$time Error evaluating THP:"
                     puts stderr "$::errorInfo"
                     setResponse code 500
-                    setResponse body "500 Internal Server Error - $fid"
+                    setResponse body "500 Internal Server Error - $time $::errorCode"
                     setResponse type "text/html; charset=[encoding system]"
                     setResponse connection "close"
                     setResponse headers {}
@@ -357,7 +362,7 @@ namespace eval ::httpd:: {
                     }
 
                     ## Get the finished result.
-                    process $url
+                    process $url $root
 
                     incr served
                     if {$served > 100} {
