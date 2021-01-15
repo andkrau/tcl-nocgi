@@ -21,6 +21,7 @@ variable site_config [::ini::get $config site]
 ## Tuning parameters.
 set root [string trimright [dict get $nocgi_config site_root] /]
 dict set nocgi_config site_root $root
+cd [file dirname [file normalize [info script]]]
 dict append nocgi_config "lib_path" "[pwd]/lib"
 pkg_mkIndex "[pwd]/lib"
 if {[file isdirectory ${root}/lib]} {
