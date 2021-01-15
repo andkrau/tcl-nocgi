@@ -6,7 +6,7 @@ The "nocgi" comes from eliminating the use of fastcgi/cgi/scgi to communicate wi
 
 Each request is dispatched to be parsed and served by a dedicated thread.
 The threading is directly borrowed from [tcl-scgi](https://github.com/gahr/tcl-scgi). 
-Improvements in speed were made by handing off processing to the dedicated thread earlier and using presistent connections throughout the life of the thread.
+Improvements in speed were made by handing off processing to the dedicated thread earlier and using persistent connections throughout the life of the thread.
 
 User scripts consist of pure HTML code with interleaved Tcl scripts enclosed in &lt;? and ?&gt; tags.
 
