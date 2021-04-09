@@ -17,8 +17,9 @@ if {![file isfile $configFile]} {
 set config [::ini::open $configFile]
 variable nocgi_config [::ini::get $config nocgi]
 variable site_config [::ini::get $config site]
+::ini::close $config
 
-## Tuning parameters.
+## Tuning parameters
 set root [string trimright [dict get $nocgi_config site_root] /]
 dict set nocgi_config site_root $root
 cd [file dirname [file normalize [info script]]]
