@@ -52,14 +52,6 @@ namespace eval ::httpd:: {
             variable response [dict create]
             interp alias {} echo {} append html
 
-            ## Handle timeout.
-            proc timeout {sock} {
-                ## Close the channel.
-                catch {chan close $sock}
-                tsv::lappend tsv freeThreads [thread::id]
-                thread::cond notify [tsv::get tsv cond]
-            }
-
             proc include {incFile} {
                 set incFile [string trimleft $incFile /]
                 upvar 1 childFile childFile
@@ -401,7 +393,8 @@ namespace eval ::httpd:: {
             } on error {} {
                 puts stderr "$::errorCode $::errorInfo"
             } finally {
-                ::httpd::timeout $sock
+                ## Close the channel.
+                catch {chan close $sock}
             }
         }
     }
