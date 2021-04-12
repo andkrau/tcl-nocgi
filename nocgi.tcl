@@ -22,14 +22,14 @@ variable site_config [::ini::get $config site]
 ## Tuning parameters
 set root [string trimright [dict get $nocgi_config site_root] /]
 dict set nocgi_config site_root $root
-cd [file dirname [file normalize [info script]]]
-dict append nocgi_config "lib_path" "[pwd]/lib"
-pkg_mkIndex "[pwd]/lib"
+set scriptDir [file dirname [file normalize [info script]]]
+dict append nocgi_config "lib_path" "${scriptDir}/lib"
+pkg_mkIndex "${scriptDir}/lib"
 if {[file isdirectory ${root}/lib]} {
     dict append nocgi_config "lib_path" "${root}/lib"
     pkg_mkIndex "${root}/lib"
 }
-cd [dict get $nocgi_config site_root]
+cd $root
 rename cd ""
 
 namespace eval ::httpd:: {
