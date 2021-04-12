@@ -39,11 +39,11 @@ namespace eval ::httpd:: {
     # connections. The worker thread is responsible for communicating with the
     # client over the client socket and for closing the connection once done.
     set worker_script {
-        lappend auto_path [dict get $nocgi_config lib_path]
-        package require ncgi
-        package require chacha20poly1305
-        
+
         namespace eval ::httpd:: {
+            lappend auto_path [dict get $nocgi_config lib_path]
+            package require ncgi
+            package require chacha20poly1305
             variable startTag [dict get $nocgi_config start_tag]
             variable endTag [dict get $nocgi_config end_tag]
             variable root [dict get $nocgi_config site_root]
