@@ -5,8 +5,7 @@ This is a a multi-threaded backend HTTP server that allows one to embed the Tcl 
 The "nocgi" comes from eliminating the use of fastcgi/cgi/scgi to communicate with the frontend server.
 
 Each request is dispatched to be parsed and served by a dedicated thread.
-The threading is directly borrowed from [tcl-scgi](https://github.com/gahr/tcl-scgi). 
-Improvements in speed were made by handing off processing to the dedicated thread earlier and using persistent connections throughout the life of the thread.
+This project is inspired by [tcl-scgi](https://github.com/gahr/tcl-scgi). Compared to tcl-scgi, this project uses tpool for thread management, hands off processing to the dedicated thread earlier and uses persistent connections throughout the life of the thread.
 
 User scripts consist of pure HTML code with interleaved Tcl scripts enclosed in &lt;? and ?&gt; tags.
 
