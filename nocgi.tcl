@@ -32,8 +32,6 @@ if {[file isdirectory ${root}/lib]} {
 cd $root
 rename cd ""
 
-namespace eval ::httpd:: {
-
     ##
     # The following script is used by worker threads to handle client
     # connections. The worker thread is responsible for communicating with the
@@ -41,6 +39,9 @@ namespace eval ::httpd:: {
     set worker_script {
 
         namespace eval ::httpd:: {
+            variable configFile $_configFile
+            variable nocgi_config $_nocgi_config
+            variable site_config $_site_config
             lappend auto_path [dict get $nocgi_config lib_path]
             package require ncgi
             package require chacha20poly1305
@@ -262,8 +263,17 @@ namespace eval ::httpd:: {
                 # Returns the completed HTML
                 return
             }
-            
-            ## Accept incoming connection
+
+            ## Accept an incoming connection
+            proc accept {sock nocgi_config site_config} {
+            thread::attach $sock
+            variable startTag
+            variable endTag
+            variable root
+            variable cryptoKey
+            variable request
+            variable response
+
             try {
                 ## Do blocking I/O on client socket. This actually improves CPU usage while not impacting performance at all.
                 chan configure $sock -blocking 1
@@ -283,12 +293,12 @@ namespace eval ::httpd:: {
                         ## Get request line.
                         chan gets $sock requestline 
                         
-                        ## Stop processing if client has closed the channel. 
+                        ## Stop processing if client has closed the channel.
                         if {[chan eof $sock]} {
                             break
                         }
                     }
-                   
+
                     if {$requestline eq {}} {
                         break
                     }
@@ -313,7 +323,7 @@ namespace eval ::httpd:: {
                         set sep [string first ":" $headerline]
                         dict lappend headers [string range $headerline 0 $sep-1] [string trim [string range $headerline $sep+1 end]]
                     }
-                    
+
                     ## Join appended header fields with comma,space (RFC2616, section 4.2).
                     dict for {name values} $headers {
                             dict set headers $name [join $values ", "]
@@ -396,91 +406,36 @@ namespace eval ::httpd:: {
                 ## Close the channel.
                 catch {chan close $sock}
             }
+            }
         }
     }
 
-    ##
-    # Handle a new connection.
-    proc handle_connect {sock addr port} {
-        chan configure $sock -blocking 0 -encoding ascii -translation crlf -buffering line
-        chan event $sock r [namespace code [list handle_request $sock $addr $port]]
-    }
-    
-    ##
-    # Handle a request on a different thread.
-    proc handle_request {sock addr port} {
-        variable worker_script
-        variable nocgi_config
-        variable site_config
-        
-        # We can't read from the socket once we begin serving the request, and
-        # we don't need a timeout anymore.
-        chan event $sock r {}
-
-        # Get a free thread. This call might wait if max_threads was reached.
-        set tid [get_thread]
-        
-        # Set up and invoke the worker thread by transferring the client socket
-        # to the thread and setting up the necessary state data.
-        thread::transfer $tid $sock
-        thread::send $tid [list set sock  $sock]
-        thread::send $tid [list set addr  $addr]
-        thread::send $tid [list set port  $port]
-        thread::send $tid [list set nocgi_config  $::nocgi_config]
-        thread::send $tid [list set site_config  $::site_config]
-        thread::send -async $tid $worker_script
-
-        # Cleanup this connection's state in the master thread. The worker
-        # thread is going to handle it from now on.
-        cleanup $sock
-    }
-
-    ##
-    # Get a free thread by creating up to max_threads. If none is available,
-    # wait until one is fed back to the free threads list.
-    proc get_thread {} {
-        variable max_threads
-        variable nofThreads
-
-        # create a new thread
-        if {$nofThreads < $max_threads} {
-            set tid [thread::create]
-            thread::preserve $tid
-            incr nofThreads
-            return $tid
-        }
-        puts "There are $nofThreads total threads"
-        puts "There are [expr {$nofThreads -  [tsv::llength tsv freeThreads]}] active threads"
-        puts "There are [tsv::llength tsv freeThreads] free threads"
-        # if there's no free threads, wait
-        thread::mutex lock [tsv::get tsv mutex]
-        while {[tsv::llength tsv freeThreads] == 0} {
-            thread::cond wait [tsv::get tsv cond] [tsv::get tsv mutex]
-        }
-        thread::mutex unlock [tsv::get tsv mutex]
-        tsv::lock tsv {
-            set tid [tsv::lindex tsv freeThreads end]
-            tsv::lpop tsv freeThreads end
-        }
-        return $tid
-    }
-    
-    variable max_threads [dict get $nocgi_config max_threads]
-    ##
-    # Thread pool -related variables. We don't use tpool because we don't have
-    # a way to pass channels when posting a job into a tpool instance.
-    variable nofThreads  0
-    tsv::set tsv freeThreads [list]
-    tsv::set tsv mutex [thread::mutex create]
-    tsv::set tsv cond [thread::cond create]
-    
-    ##
-    # Cleanup a connection's data.
-    proc cleanup {sock} {
-        catch {chan close $sock}
-    }
+## Variables to be substituted and available to the pool's initcmd
+set init_helper {
+        set _configFile [list $configFile]
+        set _nocgi_config [list $nocgi_config]
+        set _site_config [list $site_config]
 }
-    set sk [socket -server ::httpd::handle_connect [dict get $nocgi_config listen_port]]
-    set time [clock format [clock seconds] -format "%Y-%m-%d %H:%M:%S"]
-    puts "$time nocgi server started!"
-    vwait forever
+
+## Handle a new connection
+proc connect {sock addr port} {
+    chan configure $sock -blocking 0 -encoding ascii -translation crlf -buffering line
+    chan event $sock r [list transfer $sock $addr $port]
+}
+
+## Transfer a request to another thread
+proc transfer {sock addr port} {
+    variable pool
+    variable nocgi_config
+    variable site_config
+    thread::detach $sock
+    tpool::post -detached $pool [list ::httpd::accept $sock $nocgi_config $site_config]
+}
+
+set init [subst -nocommands -nobackslashes $init_helper]
+append init $worker_script
+set pool [tpool::create -minworkers 4 -maxworkers 16 -idletime 300 -initcmd $init]
+set server [socket -server connect [dict get $nocgi_config listen_port]]
+set time [clock format [clock seconds] -format "%Y-%m-%d %H:%M:%S"]
+puts "$time nocgi server started!"
+vwait forever
