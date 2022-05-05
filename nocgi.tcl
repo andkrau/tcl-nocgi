@@ -96,7 +96,7 @@ rename cd ""
                     return [dict get $httpd::response $parent $args]
                 }
             }
-            
+
             proc getRequest {parent args} {
                 if {$args eq ""} {
                     return [dict get $httpd::request $parent]
@@ -306,7 +306,7 @@ rename cd ""
                     ## Default header values.
                     set headers {}
                     dict set headers Accept-Encoding "identity;q=0.001"
-                    
+
                     ## Read additional header lines.
                     while {1} {
                         ## Read header line.
@@ -434,7 +434,7 @@ proc transfer {sock addr port} {
 
 set init [subst -nocommands -nobackslashes $init_helper]
 append init $worker_script
-set pool [tpool::create -minworkers 4 -maxworkers 16 -idletime 300 -initcmd $init]
+set pool [tpool::create -minworkers 4 -maxworkers [dict get $nocgi_config max_threads] -idletime 300 -initcmd $init]
 set server [socket -server connect [dict get $nocgi_config listen_port]]
 set time [clock format [clock seconds] -format "%Y-%m-%d %H:%M:%S"]
 puts "$time nocgi server started!"
