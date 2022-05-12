@@ -32,240 +32,246 @@ if {[file isdirectory ${root}/lib]} {
 cd $root
 rename cd ""
 
-    ##
-    # The following script is used by worker threads to handle client
-    # connections. The worker thread is responsible for communicating with the
-    # client over the client socket and for closing the connection once done.
-    set worker_script {
+##
+# The following script is used by worker threads to handle client
+# connections. The worker thread is responsible for communicating with the
+# client over the client socket and for closing the connection once done.
+set worker_script {
+    namespace eval ::httpd:: {
+        variable configFile $_configFile
+        variable nocgi_config $_nocgi_config
+        variable site_config $_site_config
+        lappend auto_path [dict get $nocgi_config lib_path]
+        package require ncgi
+        package require json
+        package require chacha20poly1305
+        variable startTag [dict get $nocgi_config start_tag]
+        variable endTag [dict get $nocgi_config end_tag]
+        variable root [dict get $nocgi_config site_root]
+        variable cryptoKey [dict get $nocgi_config crypto_key]
+        variable request [dict create]
+        variable response [dict create]
+        interp alias {} echo {} append html
 
-        namespace eval ::httpd:: {
-            variable configFile $_configFile
-            variable nocgi_config $_nocgi_config
-            variable site_config $_site_config
-            lappend auto_path [dict get $nocgi_config lib_path]
-            package require ncgi
-            package require chacha20poly1305
-            variable startTag [dict get $nocgi_config start_tag]
-            variable endTag [dict get $nocgi_config end_tag]
-            variable root [dict get $nocgi_config site_root]
-            variable cryptoKey [dict get $nocgi_config crypto_key]
-            variable request [dict create]
-            variable response [dict create]
-            interp alias {} echo {} append html
+        proc ::json::dict2json {dict} {
+            ::json::write object {*}[dict map {key value} $dict {
+                set value [::json::write string $value]
+            }]
+        }
 
-            proc include {incFile} {
-                set incFile [string trimleft $incFile /]
-                upvar 1 childFile childFile
-                set childFile $incFile
-                uplevel 1 {eval [parse $childFile]}
+        proc include {incFile} {
+            set incFile [string trimleft $incFile /]
+            upvar 1 childFile childFile
+            set childFile $incFile
+            uplevel 1 {eval [parse $childFile]}
+        }
+
+        proc readfile {incFile} {
+            set incFile [string trimleft $incFile /]
+            if {[catch {set chan [open $incFile r]}]} {
+                set pageText "<BR><BOLD>File $incFile not found!</BOLD><BR>"
+            } else {
+                set pageText [encoding convertto utf-8 [read $chan]]
+                close $chan
+            }
+            upvar 1 fileread fileread
+            set fileread $pageText
+            uplevel 1 {echo $fileread}
+        }
+
+        proc setResponse {parent data args} {
+            if {$args eq ""} {
+                dict set httpd::response $parent $data
+            } else {
+                dict set httpd::response $parent $data $args
+            }
+        }
+
+        proc setRequest {parent data args} {
+            if {$args eq ""} {
+                dict set httpd::request $parent $data
+            } else {
+                dict set httpd::request $parent $data $args
+            }
+        }
+        
+        proc getResponse {parent args} {
+            if {$args eq ""} {
+                return [dict get $httpd::response $parent]
+            } else {
+                return [dict get $httpd::response $parent $args]
+            }
+        }
+
+        proc getRequest {parent args} {
+            if {$args eq ""} {
+                return [dict get $httpd::request $parent]
+            } else {
+                return [dict get $httpd::request $parent $args]
+            }
+        }
+
+        proc existResponse {parent args} {
+            if {$args eq ""} {
+                return [dict exists $httpd::response $parent]
+            } else {
+                return [dict exists $httpd::response $parent $args]
+            }
+        }
+
+        proc existRequest {parent args} {
+            if {$args eq ""} {
+                return [dict exists $httpd::request $parent]
+            } else {
+                return [dict exists $httpd::request $parent $args]
+            }
+        }
+
+        #The following evaluates the THP script.
+        proc parse {incFile} {
+            variable startTag
+            variable endTag
+            set stLen [string length $startTag]
+            set etLen [string length $endTag]
+            # Open and read the include file.
+            if {[catch {set chan [open $incFile r]}]} {
+                set pageText "<BR><BOLD>File $incFile not found!</BOLD><BR>"
+            } else {
+                set pageText [encoding convertto utf-8 [read $chan]]
+                close $chan
             }
 
-            proc readfile {incFile} {
-                set incFile [string trimleft $incFile /]
-                if {[catch {set chan [open $incFile r]}]} {
-                    set pageText "<BR><BOLD>File $incFile not found!</BOLD><BR>"
-                } else {
-                    set pageText [encoding convertto utf-8 [read $chan]]
-                    close $chan
+            set pageTextLen [string length $pageText]
+            set endPos 0
+
+            while { $endPos != -1 && ($endPos < [expr $pageTextLen - 1]) && ( [set startPos [string first $startTag $pageText $endPos]] != -1 || [set startPos $pageTextLen] > 0)} {
+
+                set subText [string range $pageText $endPos [expr $startPos-1]]
+                if {$subText != {}} {
+                    append tclStr "echo [list [string range $pageText $endPos [expr $startPos-1] ]]\n"
                 }
-                upvar 1 fileread fileread
-                set fileread $pageText
-                uplevel 1 {echo $fileread}
-            }
-
-            proc setResponse {parent data args} {
-                if {$args eq ""} {
-                    dict set httpd::response $parent $data
-                } else {
-                    dict set httpd::response $parent $data $args
-                }
-            }
-
-            proc setRequest {parent data args} {
-                if {$args eq ""} {
-                    dict set httpd::request $parent $data
-                } else {
-                    dict set httpd::request $parent $data $args
-                }
-            }
-            
-            proc getResponse {parent args} {
-                if {$args eq ""} {
-                    return [dict get $httpd::response $parent]
-                } else {
-                    return [dict get $httpd::response $parent $args]
-                }
-            }
-
-            proc getRequest {parent args} {
-                if {$args eq ""} {
-                    return [dict get $httpd::request $parent]
-                } else {
-                    return [dict get $httpd::request $parent $args]
-                }
-            }
-
-            proc existResponse {parent args} {
-                if {$args eq ""} {
-                    return [dict exists $httpd::response $parent]
-                } else {
-                    return [dict exists $httpd::response $parent $args]
-                }
-            }
-
-            proc existRequest {parent args} {
-                if {$args eq ""} {
-                    return [dict exists $httpd::request $parent]
-                } else {
-                    return [dict exists $httpd::request $parent $args]
-                }
-            }
-
-            #The following evaluates the THP script.
-            proc parse {incFile} {
-                variable startTag
-                variable endTag
-                set stLen [string length $startTag]
-                set etLen [string length $endTag]
-                # Open and read the include file.
-                if {[catch {set chan [open $incFile r]}]} {
-                    set pageText "<BR><BOLD>File $incFile not found!</BOLD><BR>"
-                } else {
-                    set pageText [encoding convertto utf-8 [read $chan]]
-                    close $chan
-                }
-
-                set pageTextLen [string length $pageText]
-                set endPos 0
-
-                while { $endPos != -1 && ($endPos < [expr $pageTextLen - 1]) && ( [set startPos [string first $startTag $pageText $endPos]] != -1 || [set startPos $pageTextLen] > 0)} {
-
-                    set subText [string range $pageText $endPos [expr $startPos-1]]
-                    if {$subText != {}} {
-                        append tclStr "echo [list [string range $pageText $endPos [expr $startPos-1] ]]\n"
+                set endPos [string first $endTag $pageText $startPos]
+                set subText [string range $pageText [expr $startPos+$stLen] [expr $endPos-1]]
+                if {$endPos != -1 && $subText != {}} {
+                    set subText [string trim $subText]
+                    if {[string first "=" $subText] == 0} {
+                        set subText [string range $subText 1 [string length $subText]]
+                        append tclStr "echo [expr {$subText}]\n"
+                    } elseif {[string first "+" $subText] == 0} {
+                        set subText [string range $subText 1 [string length $subText]]
+                        append tclStr "include $subText\n"
+                    } elseif {[string first "!" $subText] == 0} {
+                        set subText [string range $subText 1 [string length $subText]]
+                        append tclStr "echo \[$subText\]\n"
+                    } else {
+                        append tclStr "$subText\n"
                     }
-                    set endPos [string first $endTag $pageText $startPos]
-                    set subText [string range $pageText [expr $startPos+$stLen] [expr $endPos-1]]
-                    if {$endPos != -1 && $subText != {}} {
-                        set subText [string trim $subText]
-                        if {[string first "=" $subText] == 0} {
-                            set subText [string range $subText 1 [string length $subText]]
-                            append tclStr "echo [expr {$subText}]\n"
-                        } elseif {[string first "+" $subText] == 0} {
-                            set subText [string range $subText 1 [string length $subText]]
-                            append tclStr "include $subText\n"
-                        } elseif {[string first "!" $subText] == 0} {
-                            set subText [string range $subText 1 [string length $subText]]
-                            append tclStr "echo \[$subText\]\n"
-                        } else {
-                            append tclStr "$subText\n"
-                        }
-                    }
-                    if {$endPos > 0} {
-                        incr endPos $etLen
-                    }
                 }
-                return $tclStr
-            }
-
-            proc decryptSession {encrypted} {
-                variable cryptoKey
-                binary scan [binary decode base64 [string map {- + _ /} $encrypted]] H* encrypted
-                set time [string range $encrypted 0 7]
-                set nonce [string range $encrypted 8 31]
-                set crypto [string range $encrypted 32 end]
-                scan $time %x stamp
-                set now [clock seconds]
-                if {$now - $stamp < 3600} {
-                    puts [expr $now - $stamp]
-                    try {
-                        set decrypted [::chacha20poly1305::decrypt [binary format H* $cryptoKey] [binary format H* $crypto] -assocdata [binary format H* $time] -nonce [binary format H* $nonce]]
-                        return $decrypted
-                    } on error {} {
-                        return "error:DecryptionFailed"
-                    }
-                } else {
-                    return "error:CookieTimeout"
+                if {$endPos > 0} {
+                    incr endPos $etLen
                 }
             }
+            return $tclStr
+        }
 
-            proc encryptSession {decrypted} {
-                variable cryptoKey
-                set id [string range [thread::id] end-3 end]
-                set count [string range [format %06llx [info cmdcount]] end-5 end]
-                set ms [string range [format %014llx [clock microseconds]] end-13 end]
-                set time [string range [format %08llx [clock seconds]] end-7 end]
-                set nonce "${id}${count}${ms}"
-                binary scan [::chacha20poly1305::encrypt [binary format H* $cryptoKey] $decrypted -assocdata [binary format H* $time] -nonce [binary format H* $nonce]] H* encrypted
-                return [string map {+ - / _ = {}} [binary encode base64 [binary format H* ${time}${nonce}${encrypted}]]
+        proc decryptSession {encrypted} {
+            variable cryptoKey
+            binary scan [binary decode base64 [string map {- + _ /} $encrypted]] H* encrypted
+            set time [string range $encrypted 0 7]
+            set nonce [string range $encrypted 8 31]
+            set crypto [string range $encrypted 32 end]
+            scan $time %x stamp
+            set now [clock seconds]
+            if {$now - $stamp < 3600} {
+                puts [expr $now - $stamp]
+                try {
+                    set decrypted [::chacha20poly1305::decrypt [binary format H* $cryptoKey] [binary format H* $crypto] -assocdata [binary format H* $time] -nonce [binary format H* $nonce]]
+                    return $decrypted
+                } on error {} {
+                    return "error:DecryptionFailed"
+                }
+            } else {
+                return "error:CookieTimeout"
             }
+        }
 
-            ## Process a single HTTP request.
-            proc process {url root} {
-                set html {}
-                set url [string trimright $url /]
-                set lastFolder [lindex [split $url /] end]
+        proc encryptSession {decrypted} {
+            variable cryptoKey
+            set id [string range [thread::id] end-3 end]
+            set count [string range [format %06llx [info cmdcount]] end-5 end]
+            set ms [string range [format %014llx [clock microseconds]] end-13 end]
+            set time [string range [format %08llx [clock seconds]] end-7 end]
+            set nonce "${id}${count}${ms}"
+            binary scan [::chacha20poly1305::encrypt [binary format H* $cryptoKey] $decrypted -assocdata [binary format H* $time] -nonce [binary format H* $nonce]] H* encrypted
+            return [string map {+ - / _ = {}} [binary encode base64 [binary format H* ${time}${nonce}${encrypted}]]
+        }
 
-                # If it exists, set the index file. Otherwise, throw an error.
-                if {[file exists ${root}/${url}/index.thp]} {
-                    set thpFile "${root}/${url}/index.thp"
-                } elseif {[file exists ${root}/${url}/${lastFolder}.thp]} {
-                    set thpFile "${root}/${url}/${lastFolder}.thp"
-                } elseif {[file exists ${root}/public${url}]} {
-                    set fp [open ${root}/public${url} r]
-                    fconfigure $fp -translation binary
-                    set inBinData [read $fp]
-                    close $fp
-                    setResponse code 200
-                    setResponse body $inBinData
-                    setResponse type ""
-                    setResponse connection "keep-alive"
-                    setResponse headers {}
-                    return
-                } else {
-                    setResponse code 404
-                    setResponse body "404 File Not Found"
-                    setResponse type "text/html; charset=[encoding system]"
-                    setResponse connection "keep-alive"
-                    setResponse headers {}
-                    return
-                }
+        ## Process a single HTTP request.
+        proc process {url root} {
+            set html {}
+            set url [string trimright $url /]
+            set lastFolder [lindex [split $url /] end]
 
-                # Interpret the THP script and convert to pure tcl.
-                set tclStr [parse $thpFile]
-                #puts $tclStr
-
-                # Unset all variables other than tclStr & html
-                unset url
-                unset lastFolder
-                unset thpFile
-                unset root
-
-                # Execute the tcl script (with embedded HTML) inside this interp
-                if { [catch $tclStr] } {
-                    set time [clock format [clock seconds] -format "%Y-%m-%d %H:%M:%S"]
-                    puts stderr "\n$time Error evaluating THP:"
-                    puts stderr "$::errorInfo"
-                    setResponse code 500
-                    setResponse body "500 Internal Server Error - $time $::errorCode"
-                    setResponse type "text/html; charset=[encoding system]"
-                    setResponse connection "close"
-                    setResponse headers {}
-                } else {
-                    setResponse code 200
-                    setResponse body $html
-                    if {![existResponse type]} {
-                        setResponse type "text/html; charset=[encoding system]"
-                    }
-                    setResponse connection "keep-alive"
-                    setResponse headers {}
-                }
-                # Returns the completed HTML
+            # If it exists, set the index file. Otherwise, throw an error.
+            if {[file exists ${root}/${url}/index.thp]} {
+                set thpFile "${root}/${url}/index.thp"
+            } elseif {[file exists ${root}/${url}/${lastFolder}.thp]} {
+                set thpFile "${root}/${url}/${lastFolder}.thp"
+            } elseif {[file exists ${root}/public${url}]} {
+                set fp [open ${root}/public${url} r]
+                fconfigure $fp -translation binary
+                set inBinData [read $fp]
+                close $fp
+                setResponse code 200
+                setResponse body $inBinData
+                setResponse type ""
+                setResponse connection "keep-alive"
+                setResponse headers {}
+                return
+            } else {
+                setResponse code 404
+                setResponse body "404 File Not Found"
+                setResponse type "text/html; charset=[encoding system]"
+                setResponse connection "keep-alive"
+                setResponse headers {}
                 return
             }
 
-            ## Accept an incoming connection
-            proc accept {sock nocgi_config site_config} {
+            # Interpret the THP script and convert to pure tcl.
+            set tclStr [parse $thpFile]
+            #puts $tclStr
+
+            # Unset all variables other than tclStr & html
+            unset url
+            unset lastFolder
+            unset thpFile
+            unset root
+
+            # Execute the tcl script (with embedded HTML) inside this interp
+            if { [catch $tclStr] } {
+                set time [clock format [clock seconds] -format "%Y-%m-%d %H:%M:%S"]
+                puts stderr "\n$time Error evaluating THP:"
+                puts stderr "$::errorInfo"
+                setResponse code 500
+                setResponse body "500 Internal Server Error - $time $::errorCode"
+                setResponse type "text/html; charset=[encoding system]"
+                setResponse connection "close"
+                setResponse headers {}
+            } else {
+                setResponse code 200
+                setResponse body $html
+                if {![existResponse type]} {
+                    setResponse type "text/html; charset=[encoding system]"
+                }
+                setResponse connection "keep-alive"
+                setResponse headers {}
+            }
+            # Returns the completed HTML
+            return
+        }
+
+        ## Accept an incoming connection
+        proc accept {sock nocgi_config site_config} {
             thread::attach $sock
             variable startTag
             variable endTag
@@ -291,8 +297,8 @@ rename cd ""
                     set requestline {}
                     while {$requestline eq {}} {
                         ## Get request line.
-                        chan gets $sock requestline 
-                        
+                        chan gets $sock requestline
+
                         ## Stop processing if client has closed the channel.
                         if {[chan eof $sock]} {
                             break
@@ -311,7 +317,7 @@ rename cd ""
                     while {1} {
                         ## Read header line.
                         chan gets $sock headerline
-                        ## It's an error to have an eof before header end (empty line). 
+                        ## It's an error to have an eof before header end (empty line).
                         if {[chan eof $sock]} { throw {HTTPD REQUEST_HEADER CONNECTION_CLOSED} "connection closed by client during read of HTTP request header"}
 
                         ## Break loop on last header line.
@@ -406,9 +412,9 @@ rename cd ""
                 ## Close the channel.
                 catch {chan close $sock}
             }
-            }
         }
     }
+}
 
 ## Variables to be substituted and available to the pool's initcmd
 set init_helper {
